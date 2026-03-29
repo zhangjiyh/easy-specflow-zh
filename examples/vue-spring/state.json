@@ -1,0 +1,22 @@
+{
+  "id": "T20260329-002",
+  "title": "登录与鉴权重构",
+  "stage": "accept",
+  "status": "active",
+  "language": "zh-CN",
+  "createdAt": "2026-03-29T14:00:00+08:00",
+  "updatedAt": "2026-03-29T17:30:00+08:00",
+  "artifacts": {
+    "spec": "任务说明.md",
+    "repoMap": "代码库地图.md",
+    "plan": "执行计划.md",
+    "execute": "进度记录.md",
+    "verify": "验证记录.md",
+    "accept": "验收记录.md"
+  },
+  "lastAction": {
+    "agent": "Human Reviewer",
+    "summary": "完成条件验收，结论为有条件通过，保持 active",
+    "at": "2026-03-29T17:30:00+08:00"
+  }
+}

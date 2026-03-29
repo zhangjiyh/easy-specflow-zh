@@ -55,11 +55,17 @@ project_rel() {
 doc_filename() {
   case "$1" in
     spec) printf '任务说明.md' ;;
+    repo-map) printf '代码库地图.md' ;;
     plan) printf '执行计划.md' ;;
     execute) printf '进度记录.md' ;;
+    verify) printf '验证记录.md' ;;
     accept) printf '验收记录.md' ;;
     *) error "未知文档类型: $1" ;;
   esac
+}
+
+template_file_path() {
+  printf '%s/templates/%s' "$REPO_ROOT" "$(doc_filename "$1")"
 }
 
 task_doc_path() {
@@ -136,8 +142,10 @@ write_state() {
   "updatedAt": "$(json_escape "$STATE_UPDATED_AT")",
   "artifacts": {
     "spec": "任务说明.md",
+    "repoMap": "代码库地图.md",
     "plan": "执行计划.md",
     "execute": "进度记录.md",
+    "verify": "验证记录.md",
     "accept": "验收记录.md"
   },
   "lastAction": {
@@ -152,8 +160,10 @@ EOF
 copy_templates() {
   local target_dir="$1"
   cp "$REPO_ROOT/templates/任务说明.md" "$target_dir/任务说明.md"
+  cp "$REPO_ROOT/templates/代码库地图.md" "$target_dir/代码库地图.md"
   cp "$REPO_ROOT/templates/执行计划.md" "$target_dir/执行计划.md"
   cp "$REPO_ROOT/templates/进度记录.md" "$target_dir/进度记录.md"
+  cp "$REPO_ROOT/templates/验证记录.md" "$target_dir/验证记录.md"
   cp "$REPO_ROOT/templates/验收记录.md" "$target_dir/验收记录.md"
 }
 
@@ -249,9 +259,9 @@ print_bucket() {
       [[ -f "$task_dir/state.json" ]] || continue
       load_state "$task_dir/state.json"
       if [[ "$STATE_ID" == "$active_id" ]]; then
-        printf '* %s | %s | %s | %s\n' "$STATE_ID" "$STATE_STAGE" "$STATE_STATUS" "$STATE_TITLE"
+        printf -- '* %s | %s | %s | %s\n' "$STATE_ID" "$STATE_STAGE" "$STATE_STATUS" "$STATE_TITLE"
       else
-        printf '- %s | %s | %s | %s\n' "$STATE_ID" "$STATE_STAGE" "$STATE_STATUS" "$STATE_TITLE"
+        printf -- '- %s | %s | %s | %s\n' "$STATE_ID" "$STATE_STAGE" "$STATE_STATUS" "$STATE_TITLE"
       fi
       found=1
     done < <(find "$bucket_dir" -mindepth 1 -maxdepth 1 -type d | sort)
@@ -269,6 +279,140 @@ next_plan_item() {
   sed -n -E 's/^- \[ \] (.*)$/\1/p' "$plan_file" | head -n 1
 }
 
+is_default_template() {
+  local file="$1"
+  local kind="$2"
+  [[ -f "$file" ]] || return 1
+  cmp -s "$file" "$(template_file_path "$kind")"
+}
+
+first_empty_step_field() {
+  local file="$1"
+  local field="$2"
+  [[ -f "$file" ]] || return 0
+  awk -v field="$field" '
+    function trim(value) {
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+      return value
+    }
+    function emit_if_missing() {
+      if (waiting == 1 && has_detail == 0) {
+        reported = 1
+        print (step != "" ? step : "步骤") " 缺少" field
+        exit
+      }
+      waiting = 0
+      has_detail = 0
+    }
+    /^### Step / {
+      emit_if_missing()
+      step=$0
+    }
+    {
+      prefix = "- " field "："
+      if (index($0, prefix) == 1) {
+        emit_if_missing()
+        value = trim(substr($0, length(prefix) + 1))
+        if (value == "" || value ~ /^待开始 \/ 进行中 \/ 已完成 \/ 阻塞$/) {
+          waiting = 1
+          next
+        }
+        has_detail = 1
+        next
+      }
+      if (waiting == 1) {
+        line = trim($0)
+        if (line == "") {
+          next
+        }
+        if ($0 ~ /^- [^：]+：/ || $0 ~ /^### Step /) {
+          emit_if_missing()
+        } else {
+          has_detail = 1
+        }
+      }
+    }
+    END {
+      if (reported != 1 && waiting == 1 && has_detail == 0) {
+        print (step != "" ? step : "步骤") " 缺少" field
+      }
+    }
+  ' "$file"
+}
+
+first_empty_progress_field() {
+  local file="$1"
+  local field="$2"
+  [[ -f "$file" ]] || return 0
+  awk -v field="$field" '
+    function trim(value) {
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+      return value
+    }
+    function emit_if_missing() {
+      if (waiting == 1 && has_detail == 0) {
+        reported = 1
+        print (record != "" ? record : "记录") " 缺少" field
+        exit
+      }
+      waiting = 0
+      has_detail = 0
+    }
+    /^### 记录 / {
+      emit_if_missing()
+      record=$0
+    }
+    {
+      prefix = "- " field "："
+      if (index($0, prefix) == 1) {
+        emit_if_missing()
+        value = trim(substr($0, length(prefix) + 1))
+        if (value == "" || value ~ /^是 \/ 否 \/ 待补验证$/) {
+          waiting = 1
+          next
+        }
+        has_detail = 1
+        next
+      }
+      if (waiting == 1) {
+        line = trim($0)
+        if (line == "") {
+          next
+        }
+        if ($0 ~ /^- [^：]+：/ || $0 ~ /^### 记录 /) {
+          emit_if_missing()
+        } else {
+          has_detail = 1
+        }
+      }
+    }
+    END {
+      if (reported != 1 && waiting == 1 && has_detail == 0) {
+        print (record != "" ? record : "记录") " 缺少" field
+      }
+    }
+  ' "$file"
+}
+
+first_non_clear_label_value() {
+  local file="$1"
+  local field="$2"
+  [[ -f "$file" ]] || return 0
+  awk -v field="$field" '
+    {
+      prefix = "- " field "："
+      if (index($0, prefix) == 1) {
+        value = substr($0, length(prefix) + 1)
+        gsub(/^[[:space:]]+|[[:space:]]+$/, "", value)
+        if (value != "" && value != "-" && value != "无" && value !~ /^无/ && value !~ /^暂无/ && value !~ /^暂未/ && value != "none" && value != "None" && value != "n/a" && value != "N/A") {
+          print value
+          exit
+        }
+      }
+    }
+  ' "$file"
+}
+
 first_unchecked_box() {
   local file="$1"
   [[ -f "$file" ]] || return 0
@@ -279,6 +423,12 @@ accept_conclusion() {
   local file="$1"
   [[ -f "$file" ]] || return 0
   sed -n -E 's/^- 结论：[[:space:]]*(.*)$/\1/p' "$file" | head -n 1 | sed -E 's/[[:space:]]+$//'
+}
+
+verify_accept_readiness() {
+  local file="$1"
+  [[ -f "$file" ]] || return 0
+  sed -n -E 's/^- 是否满足进入 accept：[[:space:]]*(.*)$/\1/p' "$file" | head -n 1 | sed -E 's/[[:space:]]+$//'
 }
 
 progress_blocked_value() {
@@ -299,24 +449,43 @@ is_clear_value() {
 ensure_stage_requirements() {
   local target_stage="$1"
   local dir="$2"
-  local spec_file plan_file execute_file unresolved
+  local spec_file repo_map_file plan_file execute_file verify_file
+  local unresolved missing_field
 
   spec_file="$(task_doc_path "$dir" spec)"
+  repo_map_file="$(task_doc_path "$dir" repo-map)"
   plan_file="$(task_doc_path "$dir" plan)"
   execute_file="$(task_doc_path "$dir" execute)"
+  verify_file="$(task_doc_path "$dir" verify)"
 
   case "$target_stage" in
+    repo-map)
+      if is_default_template "$spec_file" spec; then
+        error "任务说明.md 仍是默认模板，不能进入 repo-map"
+      fi
+      ;;
     plan)
-      if [[ -f "$spec_file" ]] && cmp -s "$spec_file" "$REPO_ROOT/templates/任务说明.md"; then
+      if is_default_template "$spec_file" spec; then
         error "任务说明.md 仍是默认模板，不能进入 plan"
+      fi
+      if is_default_template "$repo_map_file" repo-map; then
+        error "代码库地图.md 仍是默认模板，不能进入 plan"
       fi
       ;;
     execute)
-      if [[ -f "$plan_file" ]] && cmp -s "$plan_file" "$REPO_ROOT/templates/执行计划.md"; then
+      if is_default_template "$plan_file" plan; then
         error "执行计划.md 仍是默认模板，不能进入 execute"
       fi
       if ! grep -qE '^- \[[ x]\] ' "$plan_file"; then
         error "执行计划.md 缺少步骤列表，不能进入 execute"
+      fi
+      missing_field="$(first_empty_step_field "$plan_file" "验证方式")"
+      if [[ -n "$missing_field" ]]; then
+        error "$missing_field，不能进入 execute"
+      fi
+      missing_field="$(first_empty_step_field "$plan_file" "完成标准")"
+      if [[ -n "$missing_field" ]]; then
+        error "$missing_field，不能进入 execute"
       fi
       ;;
     verify)
@@ -324,8 +493,16 @@ ensure_stage_requirements() {
       if [[ -n "$unresolved" ]]; then
         error "执行计划仍有未勾选步骤，不能进入 verify: $unresolved"
       fi
-      if [[ -f "$execute_file" ]] && cmp -s "$execute_file" "$REPO_ROOT/templates/进度记录.md"; then
+      if is_default_template "$execute_file" execute; then
         error "进度记录.md 仍是默认模板，不能进入 verify"
+      fi
+      missing_field="$(first_empty_progress_field "$execute_file" "验证结果")"
+      if [[ -n "$missing_field" ]]; then
+        error "$missing_field，不能进入 verify"
+      fi
+      missing_field="$(first_empty_progress_field "$execute_file" "是否通过")"
+      if [[ -n "$missing_field" ]]; then
+        error "$missing_field，不能进入 verify"
       fi
       ;;
     accept)
@@ -333,8 +510,11 @@ ensure_stage_requirements() {
       if [[ -n "$unresolved" ]]; then
         error "执行计划仍有未勾选步骤，不能进入 accept: $unresolved"
       fi
-      if [[ -f "$execute_file" ]] && cmp -s "$execute_file" "$REPO_ROOT/templates/进度记录.md"; then
+      if is_default_template "$execute_file" execute; then
         error "进度记录.md 仍是默认模板，不能进入 accept"
+      fi
+      if is_default_template "$verify_file" verify; then
+        error "验证记录.md 仍是默认模板，不能进入 accept"
       fi
       ;;
   esac
@@ -342,14 +522,21 @@ ensure_stage_requirements() {
 
 done_guard_check() {
   local dir="$1"
-  local spec_file plan_file execute_file accept_file
-  local unresolved unchecked conclusion blocked
+  local spec_file repo_map_file plan_file execute_file verify_file accept_file
+  local unresolved unchecked conclusion blocked pending failed readiness
 
   DONE_GUARD_FAILURES=0
   spec_file="$(task_doc_path "$dir" spec)"
+  repo_map_file="$(task_doc_path "$dir" repo-map)"
   plan_file="$(task_doc_path "$dir" plan)"
   execute_file="$(task_doc_path "$dir" execute)"
+  verify_file="$(task_doc_path "$dir" verify)"
   accept_file="$(task_doc_path "$dir" accept)"
+
+  if is_default_template "$repo_map_file" repo-map; then
+    echo "[失败] 代码库地图.md 仍是默认模板"
+    DONE_GUARD_FAILURES=$((DONE_GUARD_FAILURES + 1))
+  fi
 
   unresolved="$(next_plan_item "$plan_file")"
   if [[ -n "$unresolved" ]]; then
@@ -375,6 +562,29 @@ done_guard_check() {
     DONE_GUARD_FAILURES=$((DONE_GUARD_FAILURES + 1))
   fi
 
+  if is_default_template "$verify_file" verify; then
+    echo "[失败] 验证记录.md 仍是默认模板"
+    DONE_GUARD_FAILURES=$((DONE_GUARD_FAILURES + 1))
+  fi
+
+  failed="$(first_non_clear_label_value "$verify_file" "未通过项")"
+  if [[ -n "$failed" ]]; then
+    echo "[失败] 验证记录仍有未通过项: $failed"
+    DONE_GUARD_FAILURES=$((DONE_GUARD_FAILURES + 1))
+  fi
+
+  pending="$(first_non_clear_label_value "$verify_file" "待补验证项")"
+  if [[ -n "$pending" ]]; then
+    echo "[失败] 验证记录仍有待补验证项: $pending"
+    DONE_GUARD_FAILURES=$((DONE_GUARD_FAILURES + 1))
+  fi
+
+  readiness="$(verify_accept_readiness "$verify_file")"
+  if [[ -n "$readiness" && "$readiness" != "是" ]]; then
+    echo "[失败] 验证记录未满足进入 accept 条件: $readiness"
+    DONE_GUARD_FAILURES=$((DONE_GUARD_FAILURES + 1))
+  fi
+
   conclusion="$(accept_conclusion "$accept_file")"
   if [[ "$conclusion" != "通过" ]]; then
     echo "[失败] 验收结论不是“通过”: ${conclusion:-未填写}"
@@ -384,38 +594,82 @@ done_guard_check() {
 
 describe_next_step() {
   local dir="$1"
-  local plan_file next_item
+  local spec_file repo_map_file plan_file execute_file verify_file accept_file
+  local next_item missing_field pending failed conclusion
 
   load_state "$dir/state.json"
+  spec_file="$(task_doc_path "$dir" spec)"
+  repo_map_file="$(task_doc_path "$dir" repo-map)"
   plan_file="$(task_doc_path "$dir" plan)"
+  execute_file="$(task_doc_path "$dir" execute)"
+  verify_file="$(task_doc_path "$dir" verify)"
+  accept_file="$(task_doc_path "$dir" accept)"
   next_item="$(next_plan_item "$plan_file")"
 
   case "$STATE_STAGE" in
     spec)
-      echo "补全 任务说明.md，确保目标、范围、约束和验收标准都已明确。"
+      if is_default_template "$spec_file" spec; then
+        echo "补全 任务说明.md，先明确目标、范围、约束和验收标准。"
+      else
+        echo "任务说明已具备基础信息，下一步进入 repo-map，先定位关键目录、入口文件和影响范围。"
+      fi
+      ;;
+    repo-map)
+      if is_default_template "$repo_map_file" repo-map; then
+        echo "先补全 代码库地图.md，确认关键目录、入口文件、直接相关文件和潜在影响文件。"
+      else
+        echo "代码边界已初步定位，下一步可基于 repo-map 补全带验证方式的执行计划。"
+      fi
       ;;
     plan)
-      if [[ -n "$next_item" ]]; then
+      missing_field="$(first_empty_step_field "$plan_file" "验证方式")"
+      if [[ -n "$missing_field" ]]; then
+        echo "先补全 执行计划.md 中每一步的验证方式：$missing_field"
+      elif [[ -n "$(first_empty_step_field "$plan_file" "完成标准")" ]]; then
+        echo "先补全 执行计划.md 中每一步的完成标准，再进入 execute。"
+      elif [[ -n "$next_item" ]]; then
         echo "确认计划后开始执行：$next_item"
       else
         echo "补全 执行计划.md 中的步骤列表，然后进入 execute。"
       fi
       ;;
     execute)
-      if [[ -n "$next_item" ]]; then
+      missing_field="$(first_empty_progress_field "$execute_file" "验证结果")"
+      if [[ -n "$missing_field" ]]; then
+        echo "execute 已推进但验证结果未补齐，先更新 进度记录.md：$missing_field"
+      elif [[ -n "$(first_empty_progress_field "$execute_file" "是否通过")" ]]; then
+        echo "execute 已推进但是否通过未回填，先补全 进度记录.md 的验证结果。"
+      elif [[ -n "$next_item" ]]; then
         echo "优先处理下一条未完成步骤：$next_item"
       else
-        echo "计划步骤已全部勾选，可整理验证结论并进入 verify。"
+        echo "计划步骤已全部勾选，可整理 验证记录.md 并进入 verify。"
       fi
       ;;
     verify)
-      echo "对照验收标准补充验证结论；如全部通过，可进入 accept。"
+      if is_default_template "$verify_file" verify; then
+        echo "先补全 验证记录.md，汇总验证范围、命令、预期结果、实际结果和结论。"
+      else
+        failed="$(first_non_clear_label_value "$verify_file" "未通过项")"
+        pending="$(first_non_clear_label_value "$verify_file" "待补验证项")"
+        if [[ -n "$failed" || -n "$pending" ]]; then
+          echo "验证记录仍有未通过项或待补验证项，先回到 execute 处理，不要进入 accept。"
+        else
+          echo "验证证据已基本齐全，可基于这些证据整理 验收记录.md 并进入 accept。"
+        fi
+      fi
       ;;
     accept)
       if [[ "$STATE_STATUS" == "done" ]]; then
         echo "任务已标记为 done，可视情况执行 archive。"
+      elif [[ "$(accept_conclusion "$accept_file")" == "有条件通过" ]]; then
+        echo "当前为有条件通过，不能标记 done；请保留 active，并明确遗留问题和后续动作。"
       else
-        echo "补全 验收记录.md；只有在无未勾选步骤、无阻塞且结论为“通过”时才可标记 done。"
+        conclusion="$(accept_conclusion "$accept_file")"
+        if [[ -n "$conclusion" && "$conclusion" != "通过" ]]; then
+          echo "验收结论当前为 ${conclusion}，不能标记 done；请先处理遗留问题或保留 active。"
+        else
+          echo "补全 验收记录.md；只有在无未勾选步骤、无阻塞、无待补验证且结论为“通过”时才可标记 done。"
+        fi
       fi
       ;;
     *)
@@ -430,8 +684,8 @@ is_task_id() {
 
 validate_stage() {
   case "$1" in
-    spec|plan|execute|verify|accept) ;;
-    *) error "非法阶段: $1。允许值: spec / plan / execute / verify / accept" ;;
+    spec|repo-map|plan|execute|verify|accept) ;;
+    *) error "非法阶段: $1。允许值: spec / repo-map / plan / execute / verify / accept" ;;
   esac
 }
 
@@ -516,8 +770,10 @@ cmd_status() {
   log "最近操作: $STATE_LAST_AGENT | $STATE_LAST_SUMMARY | $STATE_LAST_AT"
   echo "文档:"
   echo "  - $(project_rel "$(task_doc_path "$dir" spec)")"
+  echo "  - $(project_rel "$(task_doc_path "$dir" repo-map)")"
   echo "  - $(project_rel "$(task_doc_path "$dir" plan)")"
   echo "  - $(project_rel "$(task_doc_path "$dir" execute)")"
+  echo "  - $(project_rel "$(task_doc_path "$dir" verify)")"
   echo "  - $(project_rel "$(task_doc_path "$dir" accept)")"
   echo "  - $(project_rel "$dir/state.json")"
   echo "下一步建议:"
@@ -728,8 +984,8 @@ cmd_next_step() {
 cmd_verify() {
   require_init
 
-  local id dir spec_file plan_file execute_file accept_file failures
-  local unresolved stage_note
+  local id dir spec_file repo_map_file plan_file execute_file verify_file accept_file failures
+  local unresolved stage_note missing_field pending failed readiness
 
   if [[ $# -ge 1 ]]; then
     id="$1"
@@ -742,15 +998,17 @@ cmd_verify() {
   load_state "$dir/state.json"
 
   spec_file="$(task_doc_path "$dir" spec)"
+  repo_map_file="$(task_doc_path "$dir" repo-map)"
   plan_file="$(task_doc_path "$dir" plan)"
   execute_file="$(task_doc_path "$dir" execute)"
+  verify_file="$(task_doc_path "$dir" verify)"
   accept_file="$(task_doc_path "$dir" accept)"
   failures=0
 
   echo "[verify] 任务: $STATE_ID | $STATE_TITLE"
   echo "[verify] 阶段: $STATE_STAGE | 状态: $STATE_STATUS"
 
-  for file in "$spec_file" "$plan_file" "$execute_file" "$accept_file" "$dir/state.json"; do
+  for file in "$spec_file" "$repo_map_file" "$plan_file" "$execute_file" "$verify_file" "$accept_file" "$dir/state.json"; do
     if [[ -f "$file" ]]; then
       echo "[通过] 存在 $(project_rel "$file")"
     else
@@ -759,57 +1017,161 @@ cmd_verify() {
     fi
   done
 
-  if [[ -f "$spec_file" ]] && cmp -s "$spec_file" "$REPO_ROOT/templates/任务说明.md"; then
+  if is_default_template "$spec_file" spec; then
     echo "[失败] 任务说明.md 仍是默认模板，尚未补充任务信息"
     failures=$((failures + 1))
   elif [[ -f "$spec_file" ]]; then
     echo "[通过] 任务说明.md 已有自定义内容"
   fi
 
-  if [[ -f "$plan_file" ]] && cmp -s "$plan_file" "$REPO_ROOT/templates/执行计划.md"; then
-    echo "[失败] 执行计划.md 仍是默认模板，尚未形成实际计划"
-    failures=$((failures + 1))
-  elif [[ -f "$plan_file" ]]; then
-    echo "[通过] 执行计划.md 已有自定义内容"
+  if [[ "$STATE_STAGE" != "spec" ]]; then
+    if is_default_template "$repo_map_file" repo-map; then
+      echo "[失败] 代码库地图.md 仍是默认模板，尚未完成 repo-map"
+      failures=$((failures + 1))
+    else
+      echo "[通过] 代码库地图.md 已有自定义内容"
+    fi
+  else
+    echo "[提示] 当前仍在 spec，可在任务说明稳定后进入 repo-map。"
   fi
 
-  if [[ -f "$execute_file" ]] && cmp -s "$execute_file" "$REPO_ROOT/templates/进度记录.md"; then
-    echo "[失败] 进度记录.md 仍是默认模板，尚未记录执行或验证结果"
-    failures=$((failures + 1))
-  elif [[ -f "$execute_file" ]]; then
-    echo "[通过] 进度记录.md 已有自定义内容"
+  if [[ "$STATE_STAGE" == "plan" || "$STATE_STAGE" == "execute" || "$STATE_STAGE" == "verify" || "$STATE_STAGE" == "accept" || "$STATE_STATUS" == "done" ]]; then
+    if is_default_template "$plan_file" plan; then
+      echo "[失败] 执行计划.md 仍是默认模板，尚未形成实际计划"
+      failures=$((failures + 1))
+    else
+      echo "[通过] 执行计划.md 已有自定义内容"
+    fi
+
+    if ! grep -qE '^- \[[ x]\] ' "$plan_file"; then
+      echo "[失败] 执行计划.md 缺少步骤列表"
+      failures=$((failures + 1))
+    else
+      echo "[通过] 执行计划.md 存在步骤列表"
+    fi
+
+    missing_field="$(first_empty_step_field "$plan_file" "验证方式")"
+    if [[ -n "$missing_field" ]]; then
+      echo "[失败] $missing_field"
+      failures=$((failures + 1))
+    else
+      echo "[通过] 执行计划.md 中每个步骤都已定义验证方式"
+    fi
+
+    missing_field="$(first_empty_step_field "$plan_file" "完成标准")"
+    if [[ -n "$missing_field" ]]; then
+      echo "[失败] $missing_field"
+      failures=$((failures + 1))
+    else
+      echo "[通过] 执行计划.md 中每个步骤都已定义完成标准"
+    fi
+  else
+    echo "[提示] 当前未进入 plan 之后阶段，可在完成 repo-map 后再检查计划结构。"
   fi
 
   unresolved="$(next_plan_item "$plan_file")"
-  if [[ -n "$unresolved" ]]; then
+  if [[ -z "$unresolved" && -f "$plan_file" ]] && ! is_default_template "$plan_file" plan; then
+    echo "[通过] 执行计划.md 中没有未勾选步骤"
+  elif [[ "$STATE_STAGE" == "verify" || "$STATE_STAGE" == "accept" || "$STATE_STATUS" == "done" ]]; then
     echo "[失败] 仍有未完成步骤: $unresolved"
     failures=$((failures + 1))
+  elif [[ -n "$unresolved" ]]; then
+    echo "[提示] 当前仍有未完成步骤: $unresolved"
+  fi
+
+  if [[ "$STATE_STAGE" == "execute" || "$STATE_STAGE" == "verify" || "$STATE_STAGE" == "accept" || "$STATE_STATUS" == "done" ]]; then
+    if is_default_template "$execute_file" execute; then
+      echo "[失败] 进度记录.md 仍是默认模板，尚未记录执行结果"
+      failures=$((failures + 1))
+    else
+      echo "[通过] 进度记录.md 已有自定义内容"
+    fi
+
+    missing_field="$(first_empty_progress_field "$execute_file" "验证结果")"
+    if [[ -n "$missing_field" ]]; then
+      echo "[失败] $missing_field"
+      failures=$((failures + 1))
+    else
+      echo "[通过] 进度记录.md 已记录验证结果"
+    fi
+
+    missing_field="$(first_empty_progress_field "$execute_file" "是否通过")"
+    if [[ -n "$missing_field" ]]; then
+      echo "[失败] $missing_field"
+      failures=$((failures + 1))
+    else
+      echo "[通过] 进度记录.md 已记录是否通过"
+    fi
   else
-    echo "[通过] 执行计划.md 中没有未勾选步骤"
+    echo "[提示] 当前未进入 execute 之后阶段，可在开始执行后再检查进度记录。"
+  fi
+
+  if [[ "$STATE_STAGE" == "verify" || "$STATE_STAGE" == "accept" || "$STATE_STATUS" == "done" ]]; then
+    if is_default_template "$verify_file" verify; then
+      echo "[失败] 验证记录.md 仍是默认模板，尚未形成验证证据"
+      failures=$((failures + 1))
+    else
+      echo "[通过] 验证记录.md 已有自定义内容"
+    fi
+
+    pending="$(first_non_clear_label_value "$verify_file" "待补验证项")"
+    if [[ -n "$pending" ]]; then
+      echo "[失败] 验证记录仍有待补验证项: $pending"
+      failures=$((failures + 1))
+    else
+      echo "[通过] 验证记录没有待补验证项"
+    fi
+
+    failed="$(first_non_clear_label_value "$verify_file" "未通过项")"
+    if [[ -n "$failed" ]]; then
+      echo "[失败] 验证记录仍有未通过项: $failed"
+      failures=$((failures + 1))
+    else
+      echo "[通过] 验证记录没有未通过项"
+    fi
+
+    readiness="$(verify_accept_readiness "$verify_file")"
+    if [[ -n "$readiness" && "$readiness" != "是" ]]; then
+      echo "[失败] 验证记录显示当前不满足进入 accept: $readiness"
+      failures=$((failures + 1))
+    elif [[ -n "$readiness" ]]; then
+      echo "[通过] 验证记录显示当前满足进入 accept"
+    fi
+  else
+    echo "[提示] 当前未到 verify，可在完成执行后再补充验证记录。"
   fi
 
   if [[ "$STATE_STAGE" == "accept" || "$STATE_STATUS" == "done" ]]; then
-    if [[ -f "$accept_file" ]] && cmp -s "$accept_file" "$REPO_ROOT/templates/验收记录.md"; then
+    if is_default_template "$accept_file" accept; then
       echo "[失败] 验收记录.md 仍是默认模板"
       failures=$((failures + 1))
-    elif [[ -f "$accept_file" ]]; then
+    else
       echo "[通过] 验收记录.md 已有自定义内容"
     fi
+  else
+    echo "[提示] 当前未到 accept/done，可在完成验证后再补充验收记录。"
+  fi
+
+  if [[ "$STATE_STATUS" == "done" ]]; then
     done_guard_check "$dir"
     failures=$((failures + DONE_GUARD_FAILURES))
-  else
-    echo "[提示] 当前未到 accept/done，可在完成验证后再补充验收记录"
   fi
 
   case "$STATE_STAGE" in
-    spec|plan)
+    spec)
       stage_note="当前仍在前置阶段，verify 结果仅供预检查。"
       ;;
+    repo-map)
+      stage_note="补全代码库地图后，再进入 plan。"
+      ;;
+    plan)
+      stage_note="补全带验证方式和完成标准的计划后，再进入 execute。"
+      ;;
     execute)
-      stage_note="若以上检查全部通过，可考虑将阶段切到 verify。"
+      stage_note="若以上检查全部通过且计划步骤已完成，可考虑将阶段切到 verify。"
       ;;
     verify)
-      stage_note="请把本次校验结论写回 进度记录.md。"
+      stage_note="若仍有失败项或待补验证，请先回到 execute；全部通过后再进入 accept。"
       ;;
     accept)
       stage_note="验收阶段建议同步确认最终结论和归档策略。"
@@ -849,10 +1211,10 @@ SpecFlow 用法:
 说明:
   - 任务工作目录固定为 <project-root>/.specflow/
   - 当前任务通过 .specflow/index.json 中的 activeTaskId 记录
-  - 新任务默认生成四份中文文档与 state.json
-  - stage 命令用于推进 spec / plan / execute / verify / accept
-  - complete 只会在计划已勾选完成、无阻塞且验收结论为“通过”时标记 done
-  - verify 会检查未勾选步骤、未清空 BLOCKED 和不合规的 done 状态
+  - 新任务默认生成六份中文文档与 state.json
+  - stage 命令用于推进 spec / repo-map / plan / execute / verify / accept
+  - complete 只会在计划已勾选完成、无阻塞、无待补验证且验收结论为“通过”时标记 done
+  - verify 会检查 repo-map 缺失、计划未写验证方式、执行无验证结果、待补验证项和不合规的 done 状态
 EOF
 }
 

@@ -2,15 +2,16 @@
 
 ## 目标
 
-把当前任务拆成可执行、可验证、可回滚的步骤。
+把当前任务拆成可执行、可验证、可回溯的步骤。
 
 ## 输入
 
 1. `任务说明.md`
-2. `state.json`
-3. `rules/workflow.md`
-4. `rules/stage-transition.md`
-5. `templates/执行计划.md`
+2. `代码库地图.md`
+3. `state.json`
+4. `rules/workflow.md`
+5. `rules/stage-transition.md`
+6. `templates/执行计划.md`
 
 ## 输出
 
@@ -23,7 +24,7 @@
 
 1. 使用中文。
 2. 步骤要直接对应实现动作。
-3. 每一步都要有验证方式。
+3. 每一步都要有修改范围、验证方式和完成标准。
 4. `执行计划.md` 中的勾选项将作为后续流程判断依据，必须可真实回填。
 5. 只输出计划，不要在同一轮把步骤假定为已完成。
 6. 准备进入执行阶段时，将 `state.json.stage` 保持为 `plan`，或在真正开始第一个步骤时更新为 `execute`。

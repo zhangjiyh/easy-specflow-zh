@@ -1,0 +1,22 @@
+{
+  "id": "T20260329-001",
+  "title": "任务看板筛选条件统一为 criteria 对象",
+  "stage": "accept",
+  "status": "done",
+  "language": "zh-CN",
+  "createdAt": "2026-03-29T09:00:00+08:00",
+  "updatedAt": "2026-03-29T12:30:00+08:00",
+  "artifacts": {
+    "spec": "任务说明.md",
+    "repoMap": "代码库地图.md",
+    "plan": "执行计划.md",
+    "execute": "进度记录.md",
+    "verify": "验证记录.md",
+    "accept": "验收记录.md"
+  },
+  "lastAction": {
+    "agent": "Human Reviewer",
+    "summary": "基于验证证据完成验收，结论为通过并标记 done",
+    "at": "2026-03-29T12:30:00+08:00"
+  }
+}

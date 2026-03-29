@@ -30,6 +30,7 @@
       "type": "string",
       "enum": [
         "spec",
+        "repo-map",
         "plan",
         "execute",
         "verify",
@@ -63,14 +64,20 @@
       "additionalProperties": false,
       "required": [
         "spec",
+        "repoMap",
         "plan",
         "execute",
+        "verify",
         "accept"
       ],
       "properties": {
         "spec": {
           "type": "string",
           "const": "任务说明.md"
+        },
+        "repoMap": {
+          "type": "string",
+          "const": "代码库地图.md"
         },
         "plan": {
           "type": "string",
@@ -79,6 +86,10 @@
         "execute": {
           "type": "string",
           "const": "进度记录.md"
+        },
+        "verify": {
+          "type": "string",
+          "const": "验证记录.md"
         },
         "accept": {
           "type": "string",
@@ -121,8 +132,10 @@
       "updatedAt": "2026-03-29T14:30:00+08:00",
       "artifacts": {
         "spec": "任务说明.md",
+        "repoMap": "代码库地图.md",
         "plan": "执行计划.md",
         "execute": "进度记录.md",
+        "verify": "验证记录.md",
         "accept": "验收记录.md"
       },
       "lastAction": {
