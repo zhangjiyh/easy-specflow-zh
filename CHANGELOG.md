@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+1. Added `.gitignore` for local workflow data, editor files, and common temporary artifacts.
+2. Added `COPYRIGHT` to make repository copyright information explicit.
+
+### Changed
+1. Simplified `README.md` for a cleaner GitHub homepage presentation.
+
 ## [0.1.0] - 2026-03-29
 
 ### Added

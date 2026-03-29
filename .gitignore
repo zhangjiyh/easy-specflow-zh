@@ -1,0 +1,19 @@
+.DS_Store
+
+# Workflow data
+.specflow/
+
+# Editor files
+.idea/
+.vscode/
+
+# Logs and temp files
+*.log
+*.tmp
+*.swp
+
+# Common local artifacts
+node_modules/
+dist/
+coverage/
+__pycache__/
