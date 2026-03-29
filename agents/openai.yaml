@@ -1,0 +1,3 @@
+interface:
+  display_name: "easy-specflow-zh"
+  short_description: "中文长任务工作流仓库，统一 spec -> plan -> execute -> verify -> accept"

@@ -1,0 +1,135 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://easy-specflow-zh.local/schema/task-state.json",
+  "title": "easy-specflow-zh 任务状态结构",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "title",
+    "stage",
+    "status",
+    "language",
+    "createdAt",
+    "updatedAt",
+    "artifacts",
+    "lastAction"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^T\\d{8}-\\d{3}$",
+      "description": "任务 ID，不包含标题部分。"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "description": "任务标题，默认中文。"
+    },
+    "stage": {
+      "type": "string",
+      "enum": [
+        "spec",
+        "plan",
+        "execute",
+        "verify",
+        "accept"
+      ]
+    },
+    "status": {
+      "type": "string",
+      "enum": [
+        "active",
+        "done",
+        "archived",
+        "deleted"
+      ],
+      "description": "`done` 仅表示任务已经完成收口；若仍有阻塞、待补验证或有条件通过，应保持为 `active`。"
+    },
+    "language": {
+      "type": "string",
+      "default": "zh-CN"
+    },
+    "createdAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updatedAt": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "artifacts": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "spec",
+        "plan",
+        "execute",
+        "accept"
+      ],
+      "properties": {
+        "spec": {
+          "type": "string",
+          "const": "任务说明.md"
+        },
+        "plan": {
+          "type": "string",
+          "const": "执行计划.md"
+        },
+        "execute": {
+          "type": "string",
+          "const": "进度记录.md"
+        },
+        "accept": {
+          "type": "string",
+          "const": "验收记录.md"
+        }
+      }
+    },
+    "lastAction": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "agent",
+        "summary",
+        "at"
+      ],
+      "properties": {
+        "agent": {
+          "type": "string",
+          "minLength": 1
+        },
+        "summary": {
+          "type": "string",
+          "minLength": 1
+        },
+        "at": {
+          "type": "string",
+          "format": "date-time"
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "id": "T20260329-001",
+      "title": "登录与鉴权重构",
+      "stage": "execute",
+      "status": "active",
+      "language": "zh-CN",
+      "createdAt": "2026-03-29T10:00:00+08:00",
+      "updatedAt": "2026-03-29T14:30:00+08:00",
+      "artifacts": {
+        "spec": "任务说明.md",
+        "plan": "执行计划.md",
+        "execute": "进度记录.md",
+        "accept": "验收记录.md"
+      },
+      "lastAction": {
+        "agent": "Codex",
+        "summary": "完成接口改造并补充进度记录",
+        "at": "2026-03-29T14:30:00+08:00"
+      }
+    }
+  ]
+}
