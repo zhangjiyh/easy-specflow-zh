@@ -8,6 +8,10 @@
 
 `spec -> repo-map -> plan -> execute -> verify -> accept`
 
+中文对应：
+
+`需求定义 -> 代码库定位 -> 执行计划 -> 执行实现 -> 验证汇总 -> 验收结论`
+
 适用对象包括 Codex、Claude Code、OpenCode，也适合人工协作或多人接力场景。
 
 ## 这个协议解决什么问题
@@ -177,7 +181,7 @@ SPECFLOW_ROOT=/path/to/your-project bash /path/to/easy-specflow-zh/scripts/specf
 1. 任务目录格式固定为 `TYYYYMMDD-序号-任务标题`
 2. 文档名默认中文
 3. `state.json` 是任务当前阶段和状态的事实来源
-4. `index.json` 记录 `activeTaskId` 和任务索引摘要
+4. `index.json` 记录当前激活任务 ID 和任务索引摘要
 
 ## 常用命令
 
