@@ -628,7 +628,7 @@ describe_next_step() {
       elif [[ -n "$(first_empty_step_field "$plan_file" "完成标准")" ]]; then
         echo "先补全 执行计划.md 中每一步的完成标准，再进入 execute。"
       elif [[ -n "$next_item" ]]; then
-        echo "确认计划后开始执行：$next_item"
+        echo "确认计划后进入 execute，并默认连续推进剩余步骤；优先从这一项开始：$next_item"
       else
         echo "补全 执行计划.md 中的步骤列表，然后进入 execute。"
       fi
@@ -640,9 +640,9 @@ describe_next_step() {
       elif [[ -n "$(first_empty_progress_field "$execute_file" "是否通过")" ]]; then
         echo "execute 已推进但是否通过未回填，先补全 进度记录.md 的验证结果。"
       elif [[ -n "$next_item" ]]; then
-        echo "优先处理下一条未完成步骤：$next_item"
+        echo "继续连续推进剩余未完成步骤；优先从这一项开始：$next_item"
       else
-        echo "计划步骤已全部勾选，可整理 验证记录.md 并进入 verify。"
+        echo "计划步骤已全部勾选，本轮 execute 可收口；整理 验证记录.md 并进入 verify。"
       fi
       ;;
     verify)
@@ -776,7 +776,7 @@ cmd_status() {
   echo "  - $(project_rel "$(task_doc_path "$dir" verify)")"
   echo "  - $(project_rel "$(task_doc_path "$dir" accept)")"
   echo "  - $(project_rel "$dir/state.json")"
-  echo "下一步建议:"
+  echo "当前建议:"
   echo "  $(describe_next_step "$dir")"
 }
 
